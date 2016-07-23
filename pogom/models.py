@@ -16,6 +16,11 @@ args = get_args()
 db = SqliteDatabase(args.db)
 log = logging.getLogger(__name__)
 
+pokemon_id_filter = set(
+    [2, 3, 5, 6, 8, 9, 15, 28, 30, 31, 33, 34, 35, 36, 38, 44, 45, 53, 57, 62, 64, 65, 67, 68, 70, 71,
+     75, 76, 78, 80, 82, 83, 85, 87, 88, 89, 91, 92, 93, 94, 95, 97, 101, 103, 105, 106, 107, 108, 110, 112, 113, 114,
+     115, 116, 117, 119, 121, 122, 124, 125, 126, 127, 128, 130, 131, 132, 137, 138, 139, 140, 141, 142, 144,
+     145, 146, 148])
 
 class BaseModel(Model):
     class Meta:
@@ -112,6 +117,8 @@ def parse_map(map_dict, iteration_num, step, step_location):
     cells = map_dict['responses']['GET_MAP_OBJECTS']['map_cells']
     for cell in cells:
         for p in cell.get('wild_pokemons', []):
+            if p['pokemon_data']['pokemon_id'] not in pokemon_id_filter:
+                continue
             d_t = datetime.utcfromtimestamp(
                 (p['last_modified_timestamp_ms'] +
                  p['time_till_hidden_ms']) / 1000.0)
@@ -163,13 +170,13 @@ def parse_map(map_dict, iteration_num, step, step_location):
         log.info("Upserting {} pokemon".format(len(pokemons)))
         bulk_upsert(Pokemon, pokemons)
 
-    if pokestops:
-        log.info("Upserting {} pokestops".format(len(pokestops)))
-        bulk_upsert(Pokestop, pokestops)
-
-    if gyms:
-        log.info("Upserting {} gyms".format(len(gyms)))
-        bulk_upsert(Gym, gyms)
+    # if pokestops:
+    #     log.info("Upserting {} pokestops".format(len(pokestops)))
+    #     bulk_upsert(Pokestop, pokestops)
+    #
+    # if gyms:
+    #     log.info("Upserting {} gyms".format(len(gyms)))
+    #     bulk_upsert(Gym, gyms)
 
     scanned[0] = {
         'scanned_id': str(step_location[0])+','+str(step_location[1]),
