@@ -4,14 +4,14 @@
 import logging
 import os
 from peewee import Model, MySQLDatabase, SqliteDatabase, InsertQuery, IntegerField,\
-                   CharField, FloatField, BooleanField, DateTimeField,\
+                   CharField, DoubleField, BooleanField, DateTimeField,\
                    OperationalError
 from datetime import datetime
 from datetime import timedelta
 from base64 import b64encode
 
 from . import config
-from .utils import get_pokemon_name, load_credentials, get_args
+from .utils import get_pokemon_name, get_args
 from .transform import transform_from_wgs_to_gcj
 from .customLog import printPokemon
 
@@ -66,8 +66,8 @@ class Pokemon(BaseModel):
     encounter_id = CharField(primary_key=True)
     spawnpoint_id = CharField()
     pokemon_id = IntegerField()
-    latitude = FloatField()
-    longitude = FloatField()
+    latitude = DoubleField()
+    longitude = DoubleField()
     disappear_time = DateTimeField()
 
     @classmethod
@@ -130,8 +130,8 @@ class Pokemon(BaseModel):
 class Pokestop(BaseModel):
     pokestop_id = CharField(primary_key=True)
     enabled = BooleanField()
-    latitude = FloatField()
-    longitude = FloatField()
+    latitude = DoubleField()
+    longitude = DoubleField()
     last_modified = DateTimeField()
     lure_expiration = DateTimeField(null=True)
     active_pokemon_id = IntegerField(null=True)
@@ -153,6 +153,9 @@ class Pokestop(BaseModel):
 
         pokestops = []
         for p in query:
+            if args.china:
+                p['latitude'], p['longitude'] = \
+                    transform_from_wgs_to_gcj(p['latitude'], p['longitude'])
             pokestops.append(p)
 
         return pokestops
@@ -169,8 +172,8 @@ class Gym(BaseModel):
     guard_pokemon_id = IntegerField()
     gym_points = IntegerField()
     enabled = BooleanField()
-    latitude = FloatField()
-    longitude = FloatField()
+    latitude = DoubleField()
+    longitude = DoubleField()
     last_modified = DateTimeField()
 
     @classmethod
@@ -196,8 +199,8 @@ class Gym(BaseModel):
 
 class ScannedLocation(BaseModel):
     scanned_id = CharField(primary_key=True)
-    latitude = FloatField()
-    longitude = FloatField()
+    latitude = DoubleField()
+    longitude = DoubleField()
     last_modified = DateTimeField()
 
     @classmethod
@@ -276,17 +279,29 @@ def parse_map(map_dict, iteration_num, step, step_location):
                                 f['last_modified_timestamp_ms'] / 1000.0),
                         }
 
+    pokemons_upserted = 0
+    pokestops_upserted = 0
+    gyms_upserted = 0
+
     if pokemons and config['parse_pokemon']:
-        log.info("Upserting {} pokemon".format(len(pokemons)))
+        pokemons_upserted = len(pokemons)
+        log.debug("Upserting {} pokemon".format(len(pokemons)))
         bulk_upsert(Pokemon, pokemons)
 
     # if pokestops and config['parse_pokestops']:
-    #     log.info("Upserting {} pokestops".format(len(pokestops)))
+    #     pokestops_upserted = len(pokestops)
+    #     log.debug("Upserting {} pokestops".format(len(pokestops)))
     #     bulk_upsert(Pokestop, pokestops)
     #
     # if gyms and config['parse_gyms']:
-    #     log.info("Upserting {} gyms".format(len(gyms)))
+    #     gyms_upserted = len(gyms)
+    #     log.debug("Upserting {} gyms".format(len(gyms)))
     #     bulk_upsert(Gym, gyms)
+
+    log.info("Upserted {} pokemon, {} pokestops, and {} gyms".format(
+      pokemons_upserted,
+      pokestops_upserted,
+      gyms_upserted))
 
     scanned[0] = {
         'scanned_id': str(step_location[0])+','+str(step_location[1]),
