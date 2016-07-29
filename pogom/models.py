@@ -7,6 +7,7 @@ import time
 from peewee import Model, MySQLDatabase, SqliteDatabase, InsertQuery,\
                    IntegerField, CharField, DoubleField, BooleanField,\
                    DateTimeField, OperationalError
+from playhouse.shortcuts import RetryOperationalError
 from datetime import datetime, timedelta
 from base64 import b64encode
 
@@ -25,13 +26,17 @@ pokemon_id_filter = set(
      86, 87, 88, 89, 90, 91, 92, 93, 94, 96, 97, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 114, 115, 118, 119, 120, 121, 122, 125,
      129, 130, 131, 132, 137, 128, 139, 140, 141, 142, 144, 145, 146, 147, 148])
 
+class MyRetryDB(RetryOperationalError, MySQLDatabase):
+    pass
+
+
 def init_database():
     global db
     if db is not None:
         return db
 
     if args.db_type == 'mysql':
-        db = MySQLDatabase(
+        db = MyRetryDB(
             args.db_name,
             user=args.db_user,
             password=args.db_pass,
@@ -63,11 +68,14 @@ class Pokemon(BaseModel):
     # We are base64 encoding the ids delivered by the api
     # because they are too big for sqlite to handle
     encounter_id = CharField(primary_key=True, max_length=50)
-    spawnpoint_id = CharField()
-    pokemon_id = IntegerField()
+    spawnpoint_id = CharField(index=True)
+    pokemon_id = IntegerField(index=True)
     latitude = DoubleField()
     longitude = DoubleField()
-    disappear_time = DateTimeField()
+    disappear_time = DateTimeField(index=True)
+
+    class Meta:
+        indexes = ((('latitude', 'longitude'), False),)
 
     @classmethod
     def get_active(cls, swLat, swLng, neLat, neLng):
@@ -131,9 +139,12 @@ class Pokestop(BaseModel):
     enabled = BooleanField()
     latitude = DoubleField()
     longitude = DoubleField()
-    last_modified = DateTimeField()
-    lure_expiration = DateTimeField(null=True)
+    last_modified = DateTimeField(index=True)
+    lure_expiration = DateTimeField(null=True, index=True)
     active_pokemon_id = IntegerField(null=True)
+
+    class Meta:
+        indexes = ((('latitude', 'longitude'), False),)
 
     @classmethod
     def get_stops(cls, swLat, swLng, neLat, neLng):
@@ -173,7 +184,10 @@ class Gym(BaseModel):
     enabled = BooleanField()
     latitude = DoubleField()
     longitude = DoubleField()
-    last_modified = DateTimeField()
+    last_modified = DateTimeField(index=True)
+
+    class Meta:
+        indexes = ((('latitude', 'longitude'), False),)
 
     @classmethod
     def get_gyms(cls, swLat, swLng, neLat, neLng):
@@ -201,7 +215,10 @@ class ScannedLocation(BaseModel):
     scanned_id = CharField(primary_key=True, max_length=50)
     latitude = DoubleField()
     longitude = DoubleField()
-    last_modified = DateTimeField()
+    last_modified = DateTimeField(index=True)
+
+    class Meta:
+        indexes = ((('latitude', 'longitude'), False),)
 
     @classmethod
     def get_recent(cls, swLat, swLng, neLat, neLng):
@@ -346,4 +363,9 @@ def bulk_upsert(cls, data):
 def create_tables(db):
     db.connect()
     db.create_tables([Pokemon, Pokestop, Gym, ScannedLocation], safe=True)
+    db.close()
+
+def drop_tables(db):
+    db.connect()
+    db.drop_tables([Pokemon, Pokestop, Gym, ScannedLocation], safe=True)
     db.close()
